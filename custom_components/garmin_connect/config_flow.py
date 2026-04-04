@@ -74,13 +74,17 @@ class GarminConnectConfigFlowHandler(ConfigFlow, domain=DOMAIN):
             if self._login_result1 == "needs_mfa":  # MFA is required
                 return await self.async_step_mfa()
 
-        except GarminConnectConnectionError:
+        except GarminConnectConnectionError as err:
+            _LOGGER.error("Connection error during Garmin login: %s", err)
             errors = {"base": "cannot_connect"}
-        except GarminConnectAuthenticationError:
+        except GarminConnectAuthenticationError as err:
+            _LOGGER.error("Authentication error during Garmin login: %s", err)
             errors = {"base": "invalid_auth"}
-        except GarminConnectTooManyRequestsError:
+        except GarminConnectTooManyRequestsError as err:
+            _LOGGER.error("Rate limited during Garmin login: %s", err)
             errors = {"base": "too_many_requests"}
         except requests.exceptions.HTTPError as err:
+            _LOGGER.error("HTTP error during Garmin login: %s (status %s)", err, err.response.status_code)
             if err.response.status_code == 403:
                 errors = {"base": "invalid_auth"}
             elif err.response.status_code == 429:
