@@ -1,8 +1,6 @@
 """Constants for the Garmin Connect integration."""
 
 from datetime import timedelta
-from typing import NamedTuple
-
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import PERCENTAGE, UnitOfLength, UnitOfMass, UnitOfTime, UnitOfVolume
 
@@ -747,7 +745,7 @@ GEAR_ICONS = {
 }
 
 
-class ServiceSetting(NamedTuple):
+class ServiceSetting:
     """Options for the service settings, see services.yaml"""
 
     ONLY_THIS_AS_DEFAULT = "set this as default, unset others"
@@ -755,7 +753,7 @@ class ServiceSetting(NamedTuple):
     UNSET_DEFAULT = "unset default"
 
 
-class Gear(NamedTuple):
+class Gear:
     """Options for the gear settings, see services.yaml"""
 
     UUID = "uuid"
