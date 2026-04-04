@@ -12,7 +12,6 @@ from garminconnect import (
     GarminConnectConnectionError,
     GarminConnectTooManyRequestsError,
 )
-import requests
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ID, CONF_PASSWORD, CONF_TOKEN, CONF_USERNAME
@@ -63,7 +62,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 await hass.async_add_executor_job(api.login)
 
                 # Get the OAuth tokens
-                tokens = api.garth.dumps()
+                tokens = api.client.dumps()
 
                 # Create new data with token, keeping the ID
                 new_data = {
