@@ -156,7 +156,6 @@ class GarminConnectConfigFlowHandler(ConfigFlow, domain=DOMAIN):
                 status = result.get("status")
 
                 if status == "needs_mfa":
-                    self._auth_via_addon = True
                     # Create a Garmin instance so _async_create_entry works
                     self._api = Garmin(
                         email=self._username,
@@ -166,7 +165,6 @@ class GarminConnectConfigFlowHandler(ConfigFlow, domain=DOMAIN):
                     return await self.async_step_mfa()
 
                 if status == "ok":
-                    self._auth_via_addon = True
                     self._api = Garmin(is_cn=self._in_china)
                     tokens = result.get("tokens", {})
                     self._api.client.jwt_web = tokens.get("jwt_web", "")
