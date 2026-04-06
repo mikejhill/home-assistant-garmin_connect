@@ -213,8 +213,7 @@ class GarminConnectDataUpdateCoordinator(DataUpdateCoordinator):
             # Re-raise ConfigEntryAuthFailed without logging as "unknown error"
             raise
         except GarminConnectAuthenticationError as err:
-            _LOGGER.error(
-                "Authentication error occurred during login: %s", err.response.text)
+            _LOGGER.error("Authentication error occurred during login: %s", err)
             raise ConfigEntryAuthFailed from err
         except GarminConnectTooManyRequestsError as err:
             _LOGGER.error(
