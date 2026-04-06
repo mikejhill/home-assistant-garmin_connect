@@ -182,14 +182,16 @@ class GarminConnectDataUpdateCoordinator(DataUpdateCoordinator):
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=DEFAULT_UPDATE_INTERVAL)
 
     async def _ensure_addon_session(self) -> None:
-        """Verify the add-on is reachable and populate the Garmin profile.
+        """Verify the add-on is reachable and the correct user is logged in.
 
         The add-on's /api/fetch endpoint handles re-login automatically
         if the browser session has expired, so we only need to confirm
-        the add-on itself is up.  We also fetch the social profile to
-        populate display_name (required by many API URL patterns).
+        the add-on itself is up.  We also verify the logged-in user
+        matches this config entry, and populate display_name.
         """
+        entry_email = self.entry.data.get(CONF_ID, "")
         session = async_get_clientsession(self.hass)
+
         try:
             async with session.get(
                 f"{self._addon_url}/api/health",
@@ -197,14 +199,58 @@ class GarminConnectDataUpdateCoordinator(DataUpdateCoordinator):
             ) as resp:
                 data = await resp.json()
                 _LOGGER.debug(
-                    "Add-on health: status=%s, browser_active=%s",
+                    "Add-on health: status=%s, browser_active=%s, logged_in=%s",
                     data.get("status"),
                     data.get("browser_active"),
+                    data.get("logged_in_email"),
                 )
         except Exception as err:
             raise ConfigEntryNotReady(
                 f"Garmin Auth add-on not reachable at {self._addon_url}: {err}"
             ) from err
+
+        # If the add-on is logged in as a different user, trigger re-login
+        addon_email = data.get("logged_in_email", "")
+        if addon_email and entry_email and addon_email.lower() != entry_email.lower():
+            _LOGGER.warning(
+                "Add-on is logged in as %s but this entry is for %s — "
+                "the single-user proxy can only serve one account at a time. "
+                "Requesting re-login for %s.",
+                addon_email,
+                entry_email,
+                entry_email,
+            )
+            entry_password = self.entry.data.get(CONF_PASSWORD)
+            if entry_password:
+                try:
+                    async with session.post(
+                        f"{self._addon_url}/api/login",
+                        json={"email": entry_email, "password": entry_password},
+                        timeout=aiohttp.ClientTimeout(total=120),
+                    ) as login_resp:
+                        login_data = await login_resp.json()
+                        if login_data.get("status") != "ok":
+                            _LOGGER.error(
+                                "Add-on re-login failed for %s: %s",
+                                entry_email,
+                                login_data.get("message"),
+                            )
+                            raise ConfigEntryNotReady(
+                                f"Add-on re-login failed: {login_data.get('message')}"
+                            )
+                        _LOGGER.info("Add-on re-logged in as %s", entry_email)
+                except aiohttp.ClientError as err:
+                    raise ConfigEntryNotReady(f"Add-on re-login connection error: {err}") from err
+            else:
+                _LOGGER.error(
+                    "Cannot re-login: no password stored for %s. "
+                    "Please reconfigure this entry via the add-on login flow.",
+                    entry_email,
+                )
+                raise ConfigEntryNotReady(
+                    "Add-on is logged in as a different user and no password is stored "
+                    "for re-login. Reconfigure via the add-on login flow."
+                )
 
         # Populate display_name via the proxy if not already set
         if not self.api.display_name:
