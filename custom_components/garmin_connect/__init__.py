@@ -182,45 +182,29 @@ class GarminConnectDataUpdateCoordinator(DataUpdateCoordinator):
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=DEFAULT_UPDATE_INTERVAL)
 
     async def _ensure_addon_session(self) -> None:
-        """Ensure the add-on's browser has an active Garmin session.
+        """Verify the add-on is reachable.
 
-        If the add-on was restarted (or the browser timed out), this
-        triggers a fresh browser login using the stored credentials.
+        The add-on's /api/fetch endpoint handles re-login automatically
+        if the browser session has expired, so we only need to confirm
+        the add-on itself is up.  If it isn't, raise ConfigEntryNotReady
+        so HA retries later.
         """
         session = async_get_clientsession(self.hass)
         try:
             async with session.get(
-                f"{self._addon_url}/api/health", timeout=aiohttp.ClientTimeout(total=10)
+                f"{self._addon_url}/api/health",
+                timeout=aiohttp.ClientTimeout(total=10),
             ) as resp:
                 data = await resp.json()
-                if data.get("browser_active"):
-                    _LOGGER.debug("Add-on browser session is active")
-                    return
-        except Exception:
-            _LOGGER.debug("Add-on health check failed — will attempt login")
-
-        # Browser is not active — trigger a fresh login
-        password = self.entry.data.get(CONF_PASSWORD)
-        if not password or not self.entry.data.get(CONF_ID):
-            raise ConfigEntryAuthFailed(
-                "Add-on browser session expired and no credentials stored for re-login"
-            )
-
-        _LOGGER.info("Re-establishing add-on browser session for %s", self.entry.data[CONF_ID])
-        try:
-            async with session.post(
-                f"{self._addon_url}/api/login",
-                json={"email": self.entry.data[CONF_ID], "password": password},
-                timeout=aiohttp.ClientTimeout(total=300),
-            ) as resp:
-                if resp.status != 200:
-                    body = await resp.text()
-                    raise ConfigEntryAuthFailed(f"Add-on login failed ({resp.status}): {body}")
-                _LOGGER.info("Add-on browser session re-established")
-        except ConfigEntryAuthFailed:
-            raise
+                _LOGGER.debug(
+                    "Add-on health: status=%s, browser_active=%s",
+                    data.get("status"),
+                    data.get("browser_active"),
+                )
         except Exception as err:
-            raise ConfigEntryNotReady(f"Failed to contact add-on for re-login: {err}") from err
+            raise ConfigEntryNotReady(
+                f"Garmin Auth add-on not reachable at {self._addon_url}: {err}"
+            ) from err
 
     async def async_login(self) -> bool:
         """
