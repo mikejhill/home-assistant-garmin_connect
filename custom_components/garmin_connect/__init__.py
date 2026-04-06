@@ -548,7 +548,7 @@ class GarminConnectDataUpdateCoordinator(DataUpdateCoordinator):
 
         return {
             **summary,
-            **body["totalAverage"],
+            **(body.get("totalAverage") or {}),
             "nextAlarm": next_alarms,
             "gear": gear,
             "gearStats": gear_stats,
