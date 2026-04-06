@@ -14,7 +14,7 @@ from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_ID, CONF_TOKEN, CONF_PASSWORD, CONF_USERNAME
 import voluptuous as vol
 
-from .const import CONF_MFA, DOMAIN
+from .const import CONF_MFA, CONF_IMPORT_TOKEN, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -25,17 +25,16 @@ class GarminConnectConfigFlowHandler(ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     def __init__(self) -> None:
-        """
-        Initialize schemas and internal state for the Garmin Connect configuration flow handler.
-
-        Sets up validation schemas for user credentials and MFA input, and initializes variables for API client, login results, MFA code, credentials, and region detection.
-        """
+        """Initialize the config flow handler."""
         self.data_schema = {
             vol.Required(CONF_USERNAME): str,
             vol.Required(CONF_PASSWORD): str,
         }
         self.mfa_data_schema = {
             vol.Required(CONF_MFA): str,
+        }
+        self.import_token_schema = {
+            vol.Required(CONF_IMPORT_TOKEN): str,
         }
 
         self._api = None
@@ -47,20 +46,9 @@ class GarminConnectConfigFlowHandler(ConfigFlow, domain=DOMAIN):
         self._in_china = False
 
     async def _async_garmin_connect_login(self, step_id: str) -> ConfigFlowResult:
-        """
-        Authenticate the user with Garmin Connect and handle login errors or multi-factor authentication requirements.
-
-        If the user is located in China, configures the API client for the region. Initiates the login process and, if multi-factor authentication is needed, transitions to the MFA step. Handles specific authentication and connection errors, returning appropriate error messages to the user. On successful authentication, proceeds to create or update the configuration entry.
-
-        Parameters:
-            step_id (str): The current step identifier in the configuration flow.
-
-        Returns:
-            ConfigFlowResult: The result of the configuration flow step, which may be a form with errors, a transition to MFA, or entry creation.
-        """
+        """Authenticate with Garmin Connect using credentials."""
         errors = {}
 
-        # Check if the user resides in China
         country = self.hass.config.country
         if country == "CN":
             self._in_china = True
@@ -71,7 +59,7 @@ class GarminConnectConfigFlowHandler(ConfigFlow, domain=DOMAIN):
         try:
             self._login_result1, self._login_result2 = await self.hass.async_add_executor_job(self._api.login)
 
-            if self._login_result1 == "needs_mfa":  # MFA is required
+            if self._login_result1 == "needs_mfa":
                 return await self.async_step_mfa()
 
         except GarminConnectConnectionError as err:
@@ -103,11 +91,7 @@ class GarminConnectConfigFlowHandler(ConfigFlow, domain=DOMAIN):
         return await self._async_create_entry()
 
     async def _async_garmin_connect_mfa_login(self) -> ConfigFlowResult:
-        """
-        Complete the Garmin Connect authentication process using the stored multi-factor authentication (MFA) code.
-
-        If the MFA code is invalid or an error occurs, prompts the user to re-enter the code. On successful authentication, creates or updates the configuration entry.
-        """
+        """Complete MFA authentication."""
         try:
             await self.hass.async_add_executor_job(self._api.resume_login, self._login_result2, self._mfa_code)
 
@@ -122,11 +106,7 @@ class GarminConnectConfigFlowHandler(ConfigFlow, domain=DOMAIN):
         return await self._async_create_entry()
 
     async def _async_create_entry(self) -> ConfigFlowResult:
-        """
-        Create or update the configuration entry for the Garmin Connect integration using the current user's credentials and API token.
-
-        If an entry with the same username exists, its data is updated and the entry is reloaded; otherwise, a new entry is created with the username as the unique ID and the serialized API token.
-        """
+        """Create or update the config entry with the current API token."""
         config_data = {
             CONF_ID: self._username,
             CONF_TOKEN: self._api.client.dumps(),
@@ -146,29 +126,77 @@ class GarminConnectConfigFlowHandler(ConfigFlow, domain=DOMAIN):
     async def async_step_user(
             self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """
-            Handle the initial user step of the configuration flow.
+        """Show initial menu: login with credentials or import a token."""
+        return self.async_show_menu(
+            step_id="user",
+            menu_options=["credentials", "import_token"],
+        )
 
-            If no input is provided, displays a form to collect username and password. If credentials are submitted, stores them and attempts authentication with Garmin Connect.
-            """
+    async def async_step_credentials(
+            self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle credential-based login."""
         if user_input is None:
             return self.async_show_form(
-                step_id="user", data_schema=vol.Schema(self.data_schema)
+                step_id="credentials", data_schema=vol.Schema(self.data_schema)
             )
 
         self._username = user_input[CONF_USERNAME]
         self._password = user_input[CONF_PASSWORD]
 
-        return await self._async_garmin_connect_login(step_id="user")
+        return await self._async_garmin_connect_login(step_id="credentials")
+
+    async def async_step_import_token(
+            self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle token import from garmin-givemydata."""
+        errors = {}
+
+        if user_input is None:
+            return self.async_show_form(
+                step_id="import_token",
+                data_schema=vol.Schema(self.import_token_schema),
+            )
+
+        token_str = user_input[CONF_IMPORT_TOKEN].strip()
+
+        country = self.hass.config.country
+        if country == "CN":
+            self._in_china = True
+
+        self._api = Garmin(is_cn=self._in_china)
+
+        try:
+            await self.hass.async_add_executor_job(self._api.login, token_str)
+
+        except GarminConnectAuthenticationError as err:
+            _LOGGER.error("Token import auth error: %s", err)
+            errors = {"base": "invalid_token"}
+        except GarminConnectConnectionError as err:
+            _LOGGER.error("Token import connection error: %s", err)
+            errors = {"base": "cannot_connect"}
+        except GarminConnectTooManyRequestsError as err:
+            _LOGGER.error("Token import rate limited: %s", err)
+            errors = {"base": "too_many_requests"}
+        except Exception:  # pylint: disable=broad-except
+            _LOGGER.exception("Unexpected exception during token import")
+            errors = {"base": "unknown"}
+
+        if errors:
+            return self.async_show_form(
+                step_id="import_token",
+                data_schema=vol.Schema(self.import_token_schema),
+                errors=errors,
+            )
+
+        self._username = self._api.display_name or "garmin_user"
+
+        return await self._async_create_entry()
 
     async def async_step_mfa(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """
-        Handle the multi-factor authentication (MFA) step in the configuration flow.
-
-        If user input is not provided, displays a form to collect the MFA code. If input is provided, stores the MFA code and proceeds with MFA authentication.
-        """
+        """Handle the MFA step."""
         if user_input is None:
             return self.async_show_form(
                 step_id="mfa", data_schema=vol.Schema(self.mfa_data_schema)
@@ -182,12 +210,7 @@ class GarminConnectConfigFlowHandler(ConfigFlow, domain=DOMAIN):
     async def async_step_reauth(
         self, entry_data: Mapping[str, Any]
     ) -> ConfigFlowResult:
-        """
-        Start the reauthorization process using existing configuration entry data.
-
-        Extracts the username from the entry data (using CONF_ID if CONF_USERNAME is not available for migrated entries) and advances to the reauthorization confirmation step.
-        """
-        # For backward compatibility: try CONF_USERNAME first, fall back to CONF_ID
+        """Start reauthorization."""
         self._username = entry_data.get(
             CONF_USERNAME) or entry_data.get(CONF_ID)
 
@@ -196,14 +219,19 @@ class GarminConnectConfigFlowHandler(ConfigFlow, domain=DOMAIN):
     async def async_step_reauth_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """
-        Prompt the user to re-enter their username and password to confirm reauthorization of the Garmin Connect integration.
+        """Handle reauth: offer credentials or token import."""
+        return self.async_show_menu(
+            step_id="reauth_confirm",
+            menu_options=["reauth_credentials", "reauth_import_token"],
+        )
 
-        If credentials are provided, attempts to log in and complete the reauthorization process.
-        """
+    async def async_step_reauth_credentials(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle reauth with credentials."""
         if user_input is None:
             return self.async_show_form(
-                step_id="reauth_confirm",
+                step_id="reauth_credentials",
                 data_schema=vol.Schema(
                     {
                         vol.Required(CONF_USERNAME, default=self._username): str,
@@ -215,4 +243,51 @@ class GarminConnectConfigFlowHandler(ConfigFlow, domain=DOMAIN):
         self._username = user_input[CONF_USERNAME]
         self._password = user_input[CONF_PASSWORD]
 
-        return await self._async_garmin_connect_login(step_id="reauth_confirm")
+        return await self._async_garmin_connect_login(step_id="reauth_credentials")
+
+    async def async_step_reauth_import_token(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle reauth with token import."""
+        errors = {}
+
+        if user_input is None:
+            return self.async_show_form(
+                step_id="reauth_import_token",
+                data_schema=vol.Schema(self.import_token_schema),
+            )
+
+        token_str = user_input[CONF_IMPORT_TOKEN].strip()
+
+        country = self.hass.config.country
+        if country == "CN":
+            self._in_china = True
+
+        self._api = Garmin(is_cn=self._in_china)
+
+        try:
+            await self.hass.async_add_executor_job(self._api.login, token_str)
+
+        except GarminConnectAuthenticationError as err:
+            _LOGGER.error("Token reauth error: %s", err)
+            errors = {"base": "invalid_token"}
+        except GarminConnectConnectionError as err:
+            _LOGGER.error("Token reauth connection error: %s", err)
+            errors = {"base": "cannot_connect"}
+        except GarminConnectTooManyRequestsError as err:
+            _LOGGER.error("Token reauth rate limited: %s", err)
+            errors = {"base": "too_many_requests"}
+        except Exception:  # pylint: disable=broad-except
+            _LOGGER.exception("Unexpected exception during token reauth")
+            errors = {"base": "unknown"}
+
+        if errors:
+            return self.async_show_form(
+                step_id="reauth_import_token",
+                data_schema=vol.Schema(self.import_token_schema),
+                errors=errors,
+            )
+
+        self._username = self._api.display_name or self._username or "garmin_user"
+
+        return await self._async_create_entry()

@@ -2,6 +2,14 @@
     "config": {
         "step": {
             "user": {
+                "title": "Garmin Connect",
+                "description": "Choose how to authenticate with Garmin Connect.",
+                "menu_options": {
+                    "credentials": "Login with username and password",
+                    "import_token": "Import token from garmin-givemydata"
+                }
+            },
+            "credentials": {
                 "title": "Enter your Garmin Connect credentials",
                 "data": {
                     "password": "Password",
@@ -15,11 +23,33 @@
                     "mfa_code": "MFA code (6-digits)"
                 }
             },
+            "import_token": {
+                "title": "Import token from garmin-givemydata",
+                "description": "Run `garmin-givemydata --export-token` and paste the output below.",
+                "data": {
+                    "import_token": "Token JSON"
+                }
+            },
             "reauth_confirm": {
+                "title": "Re-authenticate Garmin Connect",
+                "description": "Your Garmin Connect session has expired. Choose how to re-authenticate.",
+                "menu_options": {
+                    "reauth_credentials": "Login with username and password",
+                    "reauth_import_token": "Import token from garmin-givemydata"
+                }
+            },
+            "reauth_credentials": {
                 "title": "Enter your Garmin Connect credentials",
                 "data": {
                     "password": "Password",
                     "username": "Username"
+                }
+            },
+            "reauth_import_token": {
+                "title": "Import token from garmin-givemydata",
+                "description": "Run `garmin-givemydata --export-token` and paste the output below.",
+                "data": {
+                    "import_token": "Token JSON"
                 }
             }
         },
@@ -30,6 +60,7 @@
         "error": {
             "cannot_connect": "Failed to connect",
             "invalid_auth": "Invalid authentication",
+            "invalid_token": "Invalid or expired token",
             "too_many_requests": "Too many requests, retry later",
             "unknown": "Unexpected error",
             "invalid_mfa_code": "Invalid MFA code"
