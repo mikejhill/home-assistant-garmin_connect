@@ -177,19 +177,23 @@ class GarminConnectDataUpdateCoordinator(DataUpdateCoordinator):
         # When the config entry includes an add-on URL, route all API
         # calls through the browser proxy (garmin-givemydata add-on).
         self._addon_url = entry.data.get(CONF_ADDON_URL)
-        self.api = Garmin(is_cn=self._in_china, proxy_url=self._addon_url)
+        self._entry_email = entry.data.get(CONF_ID, "")
+        self.api = Garmin(
+            is_cn=self._in_china,
+            proxy_url=self._addon_url,
+            proxy_email=self._entry_email if self._addon_url else None,
+        )
 
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=DEFAULT_UPDATE_INTERVAL)
 
     async def _ensure_addon_session(self) -> None:
-        """Verify the add-on is reachable and the correct user is logged in.
+        """Verify the add-on is reachable and populate the Garmin profile.
 
-        The add-on's /api/fetch endpoint handles re-login automatically
-        if the browser session has expired, so we only need to confirm
-        the add-on itself is up.  We also verify the logged-in user
-        matches this config entry, and populate display_name.
+        The add-on supports multiple accounts with per-user browser profiles.
+        Each ``/api/fetch`` request includes the entry's email so the add-on
+        automatically switches sessions when needed.  Here we just confirm
+        the add-on is up and populate display_name.
         """
-        entry_email = self.entry.data.get(CONF_ID, "")
         session = async_get_clientsession(self.hass)
 
         try:
@@ -209,50 +213,9 @@ class GarminConnectDataUpdateCoordinator(DataUpdateCoordinator):
                 f"Garmin Auth add-on not reachable at {self._addon_url}: {err}"
             ) from err
 
-        # If the add-on is logged in as a different user, trigger re-login
-        addon_email = data.get("logged_in_email", "")
-        if addon_email and entry_email and addon_email.lower() != entry_email.lower():
-            _LOGGER.warning(
-                "Add-on is logged in as %s but this entry is for %s — "
-                "the single-user proxy can only serve one account at a time. "
-                "Requesting re-login for %s.",
-                addon_email,
-                entry_email,
-                entry_email,
-            )
-            entry_password = self.entry.data.get(CONF_PASSWORD)
-            if entry_password:
-                try:
-                    async with session.post(
-                        f"{self._addon_url}/api/login",
-                        json={"email": entry_email, "password": entry_password},
-                        timeout=aiohttp.ClientTimeout(total=120),
-                    ) as login_resp:
-                        login_data = await login_resp.json()
-                        if login_data.get("status") != "ok":
-                            _LOGGER.error(
-                                "Add-on re-login failed for %s: %s",
-                                entry_email,
-                                login_data.get("message"),
-                            )
-                            raise ConfigEntryNotReady(
-                                f"Add-on re-login failed: {login_data.get('message')}"
-                            )
-                        _LOGGER.info("Add-on re-logged in as %s", entry_email)
-                except aiohttp.ClientError as err:
-                    raise ConfigEntryNotReady(f"Add-on re-login connection error: {err}") from err
-            else:
-                _LOGGER.error(
-                    "Cannot re-login: no password stored for %s. "
-                    "Please reconfigure this entry via the add-on login flow.",
-                    entry_email,
-                )
-                raise ConfigEntryNotReady(
-                    "Add-on is logged in as a different user and no password is stored "
-                    "for re-login. Reconfigure via the add-on login flow."
-                )
-
-        # Populate display_name via the proxy if not already set
+        # Populate display_name via the proxy if not already set.
+        # The fetch request includes our email so the add-on will
+        # switch to our session if needed.
         if not self.api.display_name:
             try:
                 prof = await self.hass.async_add_executor_job(
