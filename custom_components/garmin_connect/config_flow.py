@@ -17,7 +17,14 @@ from homeassistant.const import CONF_ID, CONF_PASSWORD, CONF_TOKEN, CONF_USERNAM
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import voluptuous as vol
 
-from .const import ADDON_API_PORT, ADDON_SLUG_SUFFIX, CONF_IMPORT_TOKEN, CONF_MFA, DOMAIN
+from .const import (
+    ADDON_API_PORT,
+    ADDON_SLUG_SUFFIX,
+    CONF_ADDON_URL,
+    CONF_IMPORT_TOKEN,
+    CONF_MFA,
+    DOMAIN,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -281,6 +288,15 @@ class GarminConnectConfigFlowHandler(ConfigFlow, domain=DOMAIN):
             CONF_ID: self._username,
             CONF_TOKEN: self._api.client.dumps(),
         }
+
+        # When using the add-on, store the URL and password so the
+        # coordinator can proxy API calls through the browser add-on
+        # and re-login after HA/add-on restarts.
+        if self._auth_via_addon and self._addon_url:
+            config_data[CONF_ADDON_URL] = self._addon_url
+        if self._auth_via_addon and self._password:
+            config_data[CONF_PASSWORD] = self._password
+
         existing_entry = await self.async_set_unique_id(self._username)
 
         if existing_entry:
