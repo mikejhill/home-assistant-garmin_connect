@@ -162,9 +162,6 @@ class GarminConnectConfigFlowHandler(ConfigFlow, domain=DOMAIN):
                     self._auth_via_addon = True
                     self._api = Garmin(is_cn=self._in_china)
                     tokens = result.get("tokens", {})
-                    token_str = self._api.client.dumps()
-                    # Inject browser-sourced tokens into the client
-                    state = self._api.client.loads(token_str)  # noqa: F841
                     self._api.client.jwt_web = tokens.get("jwt_web", "")
                     self._api.client.csrf_token = tokens.get("csrf_token", "")
                     return await self._async_create_entry()
@@ -297,7 +294,71 @@ class GarminConnectConfigFlowHandler(ConfigFlow, domain=DOMAIN):
         """Show initial menu: login with credentials or import a token."""
         return self.async_show_menu(
             step_id="user",
-            menu_options=["credentials", "import_token"],
+            menu_options=["addon_login", "credentials", "import_token"],
+        )
+
+    async def async_step_addon_login(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle browser-based login via the Garmin Auth add-on only."""
+        errors = {}
+
+        if user_input is None:
+            return self.async_show_form(
+                step_id="addon_login", data_schema=vol.Schema(self.data_schema)
+            )
+
+        self._username = user_input[CONF_USERNAME]
+        self._password = user_input[CONF_PASSWORD]
+
+        country = self.hass.config.country
+        if country == "CN":
+            self._in_china = True
+
+        if self._addon_url is None:
+            self._addon_url = await self._discover_addon()
+
+        if not self._addon_url:
+            _LOGGER.error("Garmin Auth add-on not found or not running")
+            errors = {"base": "addon_not_found"}
+            return self.async_show_form(
+                step_id="addon_login",
+                data_schema=vol.Schema(self.data_schema),
+                errors=errors,
+            )
+
+        try:
+            result = await self._addon_login()
+            status = result.get("status")
+
+            if status == "needs_mfa":
+                self._auth_via_addon = True
+                self._api = Garmin(
+                    email=self._username,
+                    password=self._password,
+                    is_cn=self._in_china,
+                )
+                return await self.async_step_mfa()
+
+            if status == "ok":
+                self._auth_via_addon = True
+                self._api = Garmin(is_cn=self._in_china)
+                tokens = result.get("tokens", {})
+                self._api.client.jwt_web = tokens.get("jwt_web", "")
+                self._api.client.csrf_token = tokens.get("csrf_token", "")
+                return await self._async_create_entry()
+
+            _LOGGER.error("Add-on login failed: %s", result.get("message"))
+            errors = {"base": "invalid_auth"}
+
+        except Exception:  # pylint: disable=broad-except
+            _LOGGER.exception("Add-on login error")
+            errors = {"base": "unknown"}
+
+        return self.async_show_form(
+            step_id="addon_login",
+            data_schema=vol.Schema(self.data_schema),
+            errors=errors,
         )
 
     async def async_step_credentials(
@@ -383,7 +444,87 @@ class GarminConnectConfigFlowHandler(ConfigFlow, domain=DOMAIN):
         """Handle reauth: offer credentials or token import."""
         return self.async_show_menu(
             step_id="reauth_confirm",
-            menu_options=["reauth_credentials", "reauth_import_token"],
+            menu_options=["reauth_addon_login", "reauth_credentials", "reauth_import_token"],
+        )
+
+    async def async_step_reauth_addon_login(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle reauth via the Garmin Auth add-on only."""
+        errors = {}
+
+        if user_input is None:
+            return self.async_show_form(
+                step_id="reauth_addon_login",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required(CONF_USERNAME, default=self._username): str,
+                        vol.Required(CONF_PASSWORD): str,
+                    }
+                ),
+            )
+
+        self._username = user_input[CONF_USERNAME]
+        self._password = user_input[CONF_PASSWORD]
+
+        country = self.hass.config.country
+        if country == "CN":
+            self._in_china = True
+
+        if self._addon_url is None:
+            self._addon_url = await self._discover_addon()
+
+        if not self._addon_url:
+            _LOGGER.error("Garmin Auth add-on not found or not running")
+            errors = {"base": "addon_not_found"}
+            return self.async_show_form(
+                step_id="reauth_addon_login",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required(CONF_USERNAME, default=self._username): str,
+                        vol.Required(CONF_PASSWORD): str,
+                    }
+                ),
+                errors=errors,
+            )
+
+        try:
+            result = await self._addon_login()
+            status = result.get("status")
+
+            if status == "needs_mfa":
+                self._auth_via_addon = True
+                self._api = Garmin(
+                    email=self._username,
+                    password=self._password,
+                    is_cn=self._in_china,
+                )
+                return await self.async_step_mfa()
+
+            if status == "ok":
+                self._auth_via_addon = True
+                self._api = Garmin(is_cn=self._in_china)
+                tokens = result.get("tokens", {})
+                self._api.client.jwt_web = tokens.get("jwt_web", "")
+                self._api.client.csrf_token = tokens.get("csrf_token", "")
+                return await self._async_create_entry()
+
+            _LOGGER.error("Add-on reauth failed: %s", result.get("message"))
+            errors = {"base": "invalid_auth"}
+
+        except Exception:  # pylint: disable=broad-except
+            _LOGGER.exception("Add-on reauth error")
+            errors = {"base": "unknown"}
+
+        return self.async_show_form(
+            step_id="reauth_addon_login",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_USERNAME, default=self._username): str,
+                    vol.Required(CONF_PASSWORD): str,
+                }
+            ),
+            errors=errors,
         )
 
     async def async_step_reauth_credentials(

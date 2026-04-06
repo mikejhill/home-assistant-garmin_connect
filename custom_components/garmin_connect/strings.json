@@ -1,68 +1,81 @@
 {
-  "config": {
-    "step": {
-      "user": {
-        "title": "Garmin Connect",
-        "description": "Choose how to authenticate with Garmin Connect.",
-        "menu_options": {
-          "credentials": "Login with username and password",
-          "import_token": "Import token from garmin-givemydata"
-        }
-      },
-      "credentials": {
-        "title": "Enter your Garmin Connect login information",
-        "data": {
-          "username": "[%key:common::config_flow::data::username%]",
-          "password": "[%key:common::config_flow::data::password%]"
-        }
-      },
-      "mfa": {
-        "title": "Enter your Garmin Connect MFA code",
-        "data": {
-          "mfa_code": "MFA code (6-digits)"
-        }
-      },
-      "import_token": {
-        "title": "Import token from garmin-givemydata",
-        "description": "Run `garmin-givemydata --export-token` and paste the output below.",
-        "data": {
-          "import_token": "Token JSON"
-        }
-      },
-      "reauth_confirm": {
-        "title": "Re-authenticate Garmin Connect",
-        "description": "Your Garmin Connect session has expired. Choose how to re-authenticate.",
-        "menu_options": {
-          "reauth_credentials": "Login with username and password",
-          "reauth_import_token": "Import token from garmin-givemydata"
-        }
-      },
-      "reauth_credentials": {
-        "title": "[%key:component::garmin_connect::config::step::credentials::title%]",
-        "data": {
-          "username": "[%key:common::config_flow::data::username%]",
-          "password": "[%key:common::config_flow::data::password%]"
-        }
-      },
-      "reauth_import_token": {
-        "title": "[%key:component::garmin_connect::config::step::import_token::title%]",
-        "description": "[%key:component::garmin_connect::config::step::import_token::description%]",
-        "data": {
-          "import_token": "Token JSON"
-        }
-      }
-    },
-    "error": {
-      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
-      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
-      "invalid_token": "Invalid or expired token",
-      "too_many_requests": "Too many requests, retry later",
-      "unknown": "[%key:common::config_flow::error::unknown%]",
-      "invalid_mfa_code": "Invalid MFA code"
-    },
-    "abort": {
-      "already_configured": "[%key:common::config_flow::abort::already_configured_account%]",
-      "reauth_successful": "[%key:common::config_flow::abort::reauth_successful%]"
+    "config": {
+        "step": {
+            "user": {
+                "title": "Garmin Connect",
+                "description": "Choose how to authenticate with Garmin Connect.",
+                "menu_options": {
+                    "addon_login": "Browser login (Garmin Auth add-on)",
+                    "credentials": "Login with username and password",
+                    "import_token": "Import token from garmin-givemydata",
+                },
+            },
+            "addon_login": {
+                "title": "Browser Login via Garmin Auth Add-on",
+                "description": "Requires the Garmin Auth add-on to be installed and running. Uses a real browser to bypass Cloudflare bot detection.",
+                "data": {
+                    "username": "[%key:common::config_flow::data::username%]",
+                    "password": "[%key:common::config_flow::data::password%]",
+                },
+            },
+            "credentials": {
+                "title": "Enter your Garmin Connect login information",
+                "data": {
+                    "username": "[%key:common::config_flow::data::username%]",
+                    "password": "[%key:common::config_flow::data::password%]",
+                },
+            },
+            "mfa": {
+                "title": "Enter your Garmin Connect MFA code",
+                "data": {"mfa_code": "MFA code (6-digits)"},
+            },
+            "import_token": {
+                "title": "Import token from garmin-givemydata",
+                "description": "Run `garmin-givemydata --export-token` and paste the output below.",
+                "data": {"import_token": "Token JSON"},
+            },
+            "reauth_confirm": {
+                "title": "Re-authenticate Garmin Connect",
+                "description": "Your Garmin Connect session has expired. Choose how to re-authenticate.",
+                "menu_options": {
+                    "reauth_addon_login": "Browser login (Garmin Auth add-on)",
+                    "reauth_credentials": "Login with username and password",
+                    "reauth_import_token": "Import token from garmin-givemydata",
+                },
+            },
+            "reauth_addon_login": {
+                "title": "[%key:component::garmin_connect::config::step::addon_login::title%]",
+                "description": "[%key:component::garmin_connect::config::step::addon_login::description%]",
+                "data": {
+                    "username": "[%key:common::config_flow::data::username%]",
+                    "password": "[%key:common::config_flow::data::password%]",
+                },
+            },
+            "reauth_credentials": {
+                "title": "[%key:component::garmin_connect::config::step::credentials::title%]",
+                "data": {
+                    "username": "[%key:common::config_flow::data::username%]",
+                    "password": "[%key:common::config_flow::data::password%]",
+                },
+            },
+            "reauth_import_token": {
+                "title": "[%key:component::garmin_connect::config::step::import_token::title%]",
+                "description": "[%key:component::garmin_connect::config::step::import_token::description%]",
+                "data": {"import_token": "Token JSON"},
+            },
+        },
+        "error": {
+            "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+            "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
+            "invalid_token": "Invalid or expired token",
+            "too_many_requests": "Too many requests, retry later",
+            "unknown": "[%key:common::config_flow::error::unknown%]",
+            "invalid_mfa_code": "Invalid MFA code",
+            "addon_not_found": "Garmin Auth add-on not found or not running. Install it from the Add-on Store first.",
+        },
+        "abort": {
+            "already_configured": "[%key:common::config_flow::abort::already_configured_account%]",
+            "reauth_successful": "[%key:common::config_flow::abort::reauth_successful%]",
+        },
     }
-  }
 }
