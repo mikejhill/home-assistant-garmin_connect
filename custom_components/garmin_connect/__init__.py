@@ -182,12 +182,12 @@ class GarminConnectDataUpdateCoordinator(DataUpdateCoordinator):
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=DEFAULT_UPDATE_INTERVAL)
 
     async def _ensure_addon_session(self) -> None:
-        """Verify the add-on is reachable.
+        """Verify the add-on is reachable and populate the Garmin profile.
 
         The add-on's /api/fetch endpoint handles re-login automatically
         if the browser session has expired, so we only need to confirm
-        the add-on itself is up.  If it isn't, raise ConfigEntryNotReady
-        so HA retries later.
+        the add-on itself is up.  We also fetch the social profile to
+        populate display_name (required by many API URL patterns).
         """
         session = async_get_clientsession(self.hass)
         try:
@@ -205,6 +205,19 @@ class GarminConnectDataUpdateCoordinator(DataUpdateCoordinator):
             raise ConfigEntryNotReady(
                 f"Garmin Auth add-on not reachable at {self._addon_url}: {err}"
             ) from err
+
+        # Populate display_name via the proxy if not already set
+        if not self.api.display_name:
+            try:
+                prof = await self.hass.async_add_executor_job(
+                    self.api.connectapi, "/userprofile-service/socialProfile"
+                )
+                if isinstance(prof, dict):
+                    self.api.display_name = prof.get("displayName", "")
+                    self.api.full_name = prof.get("fullName", "")
+                    _LOGGER.debug("Loaded profile: displayName=%s", self.api.display_name)
+            except Exception as err:
+                _LOGGER.warning("Could not fetch social profile via proxy: %s", err)
 
     async def async_login(self) -> bool:
         """
