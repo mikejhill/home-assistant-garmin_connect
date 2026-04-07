@@ -7,6 +7,6 @@
   "documentation": "https://github.com/cyberjunky/home-assistant-garmin_connect",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/cyberjunky/home-assistant-garmin_connect/issues",
-  "requirements": ["garminconnect @ git+https://github.com/mikejhill/python-garminconnect.git@master"],
+  "requirements": ["garminconnect @ git+https://github.com/mikejhill/python-garminconnect.git@known-working-20260405"],
   "version": "0.3.1"
 }
