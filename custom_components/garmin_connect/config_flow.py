@@ -167,8 +167,16 @@ class GarminConnectConfigFlowHandler(ConfigFlow, domain=DOMAIN):
                 if status == "ok":
                     self._api = Garmin(is_cn=self._in_china)
                     tokens = result.get("tokens", {})
-                    self._api.client.jwt_web = tokens.get("jwt_web", "")
-                    self._api.client.csrf_token = tokens.get("csrf_token", "")
+                    # Prefer DI tokens (required by connectapi.garmin.com)
+                    if tokens.get("di_token"):
+                        self._api.client.di_token = tokens["di_token"]
+                        self._api.client.di_refresh_token = tokens.get("di_refresh_token")
+                        self._api.client.di_client_id = tokens.get("di_client_id")
+                    # Also store JWT_WEB/CSRF as fallback
+                    if tokens.get("jwt_web"):
+                        self._api.client.jwt_web = tokens["jwt_web"]
+                    if tokens.get("csrf_token"):
+                        self._api.client.csrf_token = tokens["csrf_token"]
                     return await self._async_create_entry()
 
                 _LOGGER.warning(
@@ -261,8 +269,14 @@ class GarminConnectConfigFlowHandler(ConfigFlow, domain=DOMAIN):
 
             if status == "ok":
                 tokens = result.get("tokens", {})
-                self._api.client.jwt_web = tokens.get("jwt_web", "")
-                self._api.client.csrf_token = tokens.get("csrf_token", "")
+                if tokens.get("di_token"):
+                    self._api.client.di_token = tokens["di_token"]
+                    self._api.client.di_refresh_token = tokens.get("di_refresh_token")
+                    self._api.client.di_client_id = tokens.get("di_client_id")
+                if tokens.get("jwt_web"):
+                    self._api.client.jwt_web = tokens["jwt_web"]
+                if tokens.get("csrf_token"):
+                    self._api.client.csrf_token = tokens["csrf_token"]
                 return await self._async_create_entry()
 
             _LOGGER.error("Add-on MFA failed: %s", result.get("message"))
