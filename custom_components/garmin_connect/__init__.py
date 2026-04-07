@@ -1,6 +1,5 @@
 """The Garmin Connect integration."""
 
-import aiohttp
 import asyncio
 from collections.abc import Awaitable
 from datetime import datetime, timedelta
@@ -18,7 +17,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ID, CONF_PASSWORD, CONF_TOKEN, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from .const import (
     CONF_ADDON_URL,
@@ -174,59 +172,12 @@ class GarminConnectDataUpdateCoordinator(DataUpdateCoordinator):
         self.time_zone = self.hass.config.time_zone
         _LOGGER.debug("Time zone: %s", self.time_zone)
 
-        # When the config entry includes an add-on URL, route all API
-        # calls through the browser proxy (garmin-givemydata add-on).
+        # The add-on URL is stored so we can trigger re-authentication
+        # via the browser when tokens expire (reauth flow).
         self._addon_url = entry.data.get(CONF_ADDON_URL)
-        self._entry_email = entry.data.get(CONF_ID, "")
-        self.api = Garmin(
-            is_cn=self._in_china,
-            proxy_url=self._addon_url,
-            proxy_email=self._entry_email if self._addon_url else None,
-        )
+        self.api = Garmin(is_cn=self._in_china)
 
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=DEFAULT_UPDATE_INTERVAL)
-
-    async def _ensure_addon_session(self) -> None:
-        """Verify the add-on is reachable and populate the Garmin profile.
-
-        The add-on supports multiple accounts with per-user browser profiles.
-        Each ``/api/fetch`` request includes the entry's email so the add-on
-        automatically switches sessions when needed.  Here we just confirm
-        the add-on is up and populate display_name.
-        """
-        session = async_get_clientsession(self.hass)
-
-        try:
-            async with session.get(
-                f"{self._addon_url}/api/health",
-                timeout=aiohttp.ClientTimeout(total=10),
-            ) as resp:
-                data = await resp.json()
-                _LOGGER.debug(
-                    "Add-on health: status=%s, browser_active=%s, logged_in=%s",
-                    data.get("status"),
-                    data.get("browser_active"),
-                    data.get("logged_in_email"),
-                )
-        except Exception as err:
-            raise ConfigEntryNotReady(
-                f"Garmin Auth add-on not reachable at {self._addon_url}: {err}"
-            ) from err
-
-        # Populate display_name via the proxy if not already set.
-        # The fetch request includes our email so the add-on will
-        # switch to our session if needed.
-        if not self.api.display_name:
-            try:
-                prof = await self.hass.async_add_executor_job(
-                    self.api.connectapi, "/userprofile-service/socialProfile"
-                )
-                if isinstance(prof, dict):
-                    self.api.display_name = prof.get("displayName", "")
-                    self.api.full_name = prof.get("fullName", "")
-                    _LOGGER.debug("Loaded profile: displayName=%s", self.api.display_name)
-            except Exception as err:
-                _LOGGER.warning("Could not fetch social profile via proxy: %s", err)
 
     async def async_login(self) -> bool:
         """
@@ -242,12 +193,6 @@ class GarminConnectDataUpdateCoordinator(DataUpdateCoordinator):
             ConfigEntryNotReady: If a connection error occurs.
         """
         try:
-            # When using the add-on proxy, ensure the browser session
-            # is active rather than loading tokens locally.
-            if self._addon_url:
-                await self._ensure_addon_session()
-                return True
-
             # Check if the token exists in the entry data
             if CONF_TOKEN not in self.entry.data:
                 _LOGGER.info("Token not found in config entry. Reauthentication required.")
