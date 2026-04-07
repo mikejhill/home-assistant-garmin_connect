@@ -19,7 +19,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from .const import (
-    CONF_ADDON_URL,
     DATA_COORDINATOR,
     DAY_TO_NUMBER,
     DEFAULT_UPDATE_INTERVAL,
@@ -35,7 +34,8 @@ PLATFORMS = ["sensor"]
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Migrate old config entry from username/password to token-based authentication."""
-    _LOGGER.debug("Migrating Garmin Connect config entry from version %s", entry.version)
+    _LOGGER.debug(
+        "Migrating Garmin Connect config entry from version %s", entry.version)
 
     if entry.version == 1:
         # Scenario 1: Has USERNAME + PASSWORD but no TOKEN (old auth method)
@@ -46,8 +46,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             and CONF_PASSWORD in entry.data
         ):
             _LOGGER.info(
-                "Migrating Garmin Connect config entry from username/password to token-based authentication"
-            )
+                "Migrating Garmin Connect config entry from username/password to token-based authentication")
 
             username = entry.data[CONF_USERNAME]
             password = entry.data[CONF_PASSWORD]
@@ -74,7 +73,8 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 # Update the config entry
                 hass.config_entries.async_update_entry(entry, data=new_data)
 
-                _LOGGER.info("Successfully migrated Garmin Connect config entry")
+                _LOGGER.info(
+                    "Successfully migrated Garmin Connect config entry")
                 return True
 
             except Exception as err:  # pylint: disable=broad-except
@@ -87,8 +87,13 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # Scenario 2: Has USERNAME + TOKEN but no ID (partially migrated)
         # Migrate to: ID + TOKEN (remove USERNAME)
-        elif CONF_ID not in entry.data and CONF_USERNAME in entry.data and CONF_TOKEN in entry.data:
-            _LOGGER.info("Migrating Garmin Connect config entry: converting USERNAME to ID")
+        elif (
+            CONF_ID not in entry.data
+            and CONF_USERNAME in entry.data
+            and CONF_TOKEN in entry.data
+        ):
+            _LOGGER.info(
+                "Migrating Garmin Connect config entry: converting USERNAME to ID")
 
             username = entry.data[CONF_USERNAME]
 
@@ -101,14 +106,16 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # Update the config entry
             hass.config_entries.async_update_entry(entry, data=new_data)
 
-            _LOGGER.info("Successfully migrated Garmin Connect config entry from USERNAME to ID")
+            _LOGGER.info(
+                "Successfully migrated Garmin Connect config entry from USERNAME to ID")
             return True
 
         # Scenario 3: Missing both TOKEN and credentials (incomplete/corrupted)
         # Add placeholder ID to allow reauth flow
         elif CONF_TOKEN not in entry.data:
             if CONF_ID not in entry.data:
-                _LOGGER.info("Config entry missing CONF_ID, adding placeholder for reauth flow")
+                _LOGGER.info(
+                    "Config entry missing CONF_ID, adding placeholder for reauth flow")
                 new_data = {
                     **entry.data,
                     CONF_ID: entry.entry_id,  # Use entry_id as fallback
@@ -172,12 +179,10 @@ class GarminConnectDataUpdateCoordinator(DataUpdateCoordinator):
         self.time_zone = self.hass.config.time_zone
         _LOGGER.debug("Time zone: %s", self.time_zone)
 
-        # The add-on URL is stored so we can trigger re-authentication
-        # via the browser when tokens expire (reauth flow).
-        self._addon_url = entry.data.get(CONF_ADDON_URL)
         self.api = Garmin(is_cn=self._in_china)
 
-        super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=DEFAULT_UPDATE_INTERVAL)
+        super().__init__(hass, _LOGGER, name=DOMAIN,
+                         update_interval=DEFAULT_UPDATE_INTERVAL)
 
     async def async_login(self) -> bool:
         """
@@ -195,7 +200,9 @@ class GarminConnectDataUpdateCoordinator(DataUpdateCoordinator):
         try:
             # Check if the token exists in the entry data
             if CONF_TOKEN not in self.entry.data:
-                _LOGGER.info("Token not found in config entry. Reauthentication required.")
+                _LOGGER.info(
+                    "Token not found in config entry. Reauthentication required."
+                )
                 raise ConfigEntryAuthFailed(
                     "Token not found in config entry. This may be an old or incomplete configuration. "
                     "A reauthentication flow will be initiated. Please check your notifications."
@@ -206,27 +213,33 @@ class GarminConnectDataUpdateCoordinator(DataUpdateCoordinator):
             # Re-raise ConfigEntryAuthFailed without logging as "unknown error"
             raise
         except GarminConnectAuthenticationError as err:
-            _LOGGER.error("Authentication error occurred during login: %s", err)
+            _LOGGER.error(
+                "Authentication error occurred during login: %s", err.response.text)
             raise ConfigEntryAuthFailed from err
         except GarminConnectTooManyRequestsError as err:
-            _LOGGER.error("Too many request error occurred during login: %s", err)
+            _LOGGER.error(
+                "Too many request error occurred during login: %s", err)
             return False
         except GarminConnectConnectionError as err:
-            _LOGGER.error("Connection error occurred during Garmin Connect login request: %s", err)
+            _LOGGER.error(
+                "Connection error occurred during Garmin Connect login request: %s", err
+            )
             raise ConfigEntryNotReady from err
         except requests.exceptions.HTTPError as err:
             if err.response.status_code == 401:
-                _LOGGER.error("Authentication error occurred during login: %s", err.response.text)
+                _LOGGER.error(
+                    "Authentication error occurred during login: %s", err.response.text)
                 raise ConfigEntryAuthFailed from err
             if err.response.status_code == 429:
                 _LOGGER.error(
-                    "Too many requests error occurred during login: %s", err.response.text
-                )
+                    "Too many requests error occurred during login: %s", err.response.text)
                 return False
-            _LOGGER.error("Unknown HTTP error occurred during login: %s", err)
+            _LOGGER.error(
+                "Unknown HTTP error occurred during login: %s", err)
             return False
         except Exception as err:  # pylint: disable=broad-except
-            _LOGGER.exception("Unknown error occurred during login: %s", err)
+            _LOGGER.exception(
+                "Unknown error occurred during login: %s", err)
             return False
 
         return True
@@ -285,7 +298,8 @@ class GarminConnectDataUpdateCoordinator(DataUpdateCoordinator):
                 (today + timedelta(days=1)).isoformat(),
             )
             if last_activities:
-                _LOGGER.debug("Last activities data fetched: %s", last_activities)
+                _LOGGER.debug("Last activities data fetched: %s",
+                              last_activities)
             else:
                 _LOGGER.debug("No last activities data found")
 
@@ -306,7 +320,8 @@ class GarminConnectDataUpdateCoordinator(DataUpdateCoordinator):
             # Calculate user points and user level
             user_points = 0
             for badge in badges:
-                user_points += badge["badgePoints"] * badge["badgeEarnedNumber"]
+                user_points += badge["badgePoints"] * \
+                    badge["badgeEarnedNumber"]
 
             # Add user points to summary
             summary["userPoints"] = user_points
@@ -332,7 +347,8 @@ class GarminConnectDataUpdateCoordinator(DataUpdateCoordinator):
             # Activity types
             activity_types = await self.hass.async_add_executor_job(self.api.get_activity_types)
             if activity_types:
-                _LOGGER.debug("Activity types data fetched: %s", activity_types)
+                _LOGGER.debug("Activity types data fetched: %s",
+                              activity_types)
             else:
                 _LOGGER.debug("No activity types data found")
 
@@ -396,27 +412,32 @@ class GarminConnectDataUpdateCoordinator(DataUpdateCoordinator):
                 _LOGGER.debug("No hydration data found")
 
         except GarminConnectAuthenticationError as err:
-            _LOGGER.error("Authentication error occurred during update: %s", err.response.text)
+            _LOGGER.error(
+                "Authentication error occurred during update: %s", err.response.text)
             raise ConfigEntryAuthFailed from err
         except GarminConnectTooManyRequestsError as err:
-            _LOGGER.error("Too many request error occurred during update: %s", err)
+            _LOGGER.error(
+                "Too many request error occurred during update: %s", err)
             return {}
         except GarminConnectConnectionError as err:
-            _LOGGER.error("Connection error occurred during update: %s", err)
+            _LOGGER.error(
+                "Connection error occurred during update: %s", err)
             raise ConfigEntryNotReady from err
         except requests.exceptions.HTTPError as err:
             if err.response.status_code == 401:
-                _LOGGER.error("Authentication error occurred during update: %s", err.response.text)
+                _LOGGER.error(
+                    "Authentication error occurred during update: %s", err.response.text)
                 raise ConfigEntryAuthFailed from err
             if err.response.status_code == 429:
                 _LOGGER.error(
-                    "Too many requests error occurred during update: %s", err.response.text
-                )
+                    "Too many requests error occurred during update: %s", err.response.text)
                 return {}
-            _LOGGER.error("Unknown HTTP error occurred during update: %s", err)
+            _LOGGER.error(
+                "Unknown HTTP error occurred during update: %s", err)
             return False
         except Exception as err:  # pylint: disable=broad-except
-            _LOGGER.exception("Unknown error occurred during update: %s", err)
+            _LOGGER.exception(
+                "Unknown error occurred during update: %s", err)
             return {}
 
         try:
@@ -424,7 +445,9 @@ class GarminConnectDataUpdateCoordinator(DataUpdateCoordinator):
             if gear:
                 # Gear stats data like distance, time, etc.
                 tasks: list[Awaitable] = [
-                    self.hass.async_add_executor_job(self.api.get_gear_stats, gear_item[Gear.UUID])
+                    self.hass.async_add_executor_job(
+                        self.api.get_gear_stats, gear_item[Gear.UUID]
+                    )
                     for gear_item in gear
                 ]
                 gear_stats = await asyncio.gather(*tasks)
@@ -448,35 +471,32 @@ class GarminConnectDataUpdateCoordinator(DataUpdateCoordinator):
                 _LOGGER.debug("No gear data available, skipping gear stats and defaults fetch")
         except GarminConnectAuthenticationError as err:
             _LOGGER.error(
-                "Authentication error occurred while fetching Gear data: %s", err.response.text
-            )
+                "Authentication error occurred while fetching Gear data: %s", err.response.text)
             raise ConfigEntryAuthFailed from err
         except GarminConnectTooManyRequestsError as err:
-            _LOGGER.error("Too many request error occurred while fetching Gear data: %s", err)
+            _LOGGER.error(
+                "Too many request error occurred while fetching Gear data: %s", err)
             raise ConfigEntryNotReady from err
         except GarminConnectConnectionError as err:
-            _LOGGER.error("Connection error occurred while fetching Gear data: %s", err)
+            _LOGGER.error(
+                "Connection error occurred while fetching Gear data: %s", err)
             raise ConfigEntryNotReady from err
         except requests.exceptions.HTTPError as err:
             if err.response.status_code == 401:
                 _LOGGER.error(
-                    "Authentication error while fetching Gear data: %s", err.response.text
-                )
+                    "Authentication error while fetching Gear data: %s", err.response.text)
             elif err.response.status_code == 403:
                 _LOGGER.debug(
-                    "Access forbidden while fetching Gear data (user may not have gear configured): %s",
-                    err.response.text,
-                )
+                    "Access forbidden while fetching Gear data (user may not have gear configured): %s", err.response.text)
             elif err.response.status_code == 404:
                 _LOGGER.debug(
-                    "Gear data not found (user may not have gear configured): %s", err.response.text
-                )
+                    "Gear data not found (user may not have gear configured): %s", err.response.text)
             elif err.response.status_code == 429:
                 _LOGGER.error(
-                    "Too many requests error while fetching Gear data: %s", err.response.text
-                )
+                    "Too many requests error while fetching Gear data: %s", err.response.text)
             else:
-                _LOGGER.error("Unknown HTTP error occurred while fetching Gear data: %s", err)
+                _LOGGER.error(
+                    "Unknown HTTP error occurred while fetching Gear data: %s", err)
         except (KeyError, TypeError, ValueError, ConnectionError) as err:
             _LOGGER.debug("Error occurred while fetching Gear data: %s", err)
 
@@ -491,7 +511,8 @@ class GarminConnectDataUpdateCoordinator(DataUpdateCoordinator):
         try:
             sleep_time_seconds = sleep_data["dailySleepDTO"]["sleepTimeSeconds"]
             if sleep_time_seconds:
-                _LOGGER.debug("Sleep time seconds data: %s", sleep_time_seconds)
+                _LOGGER.debug("Sleep time seconds data: %s",
+                              sleep_time_seconds)
             else:
                 _LOGGER.debug("No sleep time seconds data found")
         except KeyError:
@@ -503,7 +524,8 @@ class GarminConnectDataUpdateCoordinator(DataUpdateCoordinator):
                 hrv_status = hrv_data["hrvSummary"]
                 _LOGGER.debug("HRV summary status: %s", hrv_status)
         except KeyError:
-            _LOGGER.debug("Error occurred while processing HRV summary status data")
+            _LOGGER.debug(
+                "Error occurred while processing HRV summary status data")
 
         # Endurance status
         try:
@@ -515,7 +537,7 @@ class GarminConnectDataUpdateCoordinator(DataUpdateCoordinator):
 
         return {
             **summary,
-            **(body.get("totalAverage") or {}),
+            **body["totalAverage"],
             "nextAlarm": next_alarms,
             "gear": gear,
             "gearStats": gear_stats,
@@ -577,8 +599,10 @@ def calculate_next_active_alarms(alarms, time_zone):
                 )
 
                 days_to_add = DAY_TO_NUMBER[day] % 7
-                alarm = start_of_week + timedelta(minutes=alarm_time, days=days_to_add)
-                _LOGGER.debug("Start of week: %s, Alarm: %s", start_of_week, alarm)
+                alarm = start_of_week + \
+                    timedelta(minutes=alarm_time, days=days_to_add)
+                _LOGGER.debug("Start of week: %s, Alarm: %s",
+                              start_of_week, alarm)
 
                 # If the alarm time is in the past, move it to the next week
                 if alarm < now:

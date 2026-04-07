@@ -8,12 +8,6 @@ DOMAIN = "garmin_connect"
 DATA_COORDINATOR = "coordinator"
 DEFAULT_UPDATE_INTERVAL = timedelta(minutes=5)
 CONF_MFA = "mfa_code"
-CONF_IMPORT_TOKEN = "import_token"
-CONF_ADDON_URL = "addon_url"
-
-# Garmin Auth add-on discovery
-ADDON_SLUG_SUFFIX = "garmin_auth"
-ADDON_API_PORT = 8099
 DAY_TO_NUMBER = {
     "Mo": 1,
     "M": 1,
